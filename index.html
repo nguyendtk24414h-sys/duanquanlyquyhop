@@ -1573,7 +1573,7 @@
         const voteSBTAddress = "0xbc207d44E59D00e5652c2FF6217B6ae3E79d48C9"; 
 
         const isLocalHost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-        window.PINATA_PROXY_URL = (window.__APP_PROXY_URL__ || '').trim() || (isLocalHost ? 'http://localhost:3000' : '');
+        window.PINATA_PROXY_URL = (window.__APP_PROXY_URL__ || '').trim() || (isLocalHost ? 'http://localhost:3000' : 'https://duanquanlyquyhop-production.up.railway.app');
 
         const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6";
         const DEFAULT_ADMIN_ROLE = "0x0000000000000000000000000000000000000000000000000000000000000000";
