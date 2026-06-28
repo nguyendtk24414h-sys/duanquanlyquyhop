@@ -4,7 +4,11 @@
   "description": "Simple backend proxy for Pinata IPFS metadata uploads.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "npx nodemon --watch server.js --exec node server.js"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "cors": "^2.8.5",

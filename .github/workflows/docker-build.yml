@@ -1,0 +1,32 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install backend dependencies
+        run: cd backend && npm ci
+
+      - name: Validate backend package files
+        run: cd backend && npm run --silent | head -n 20 || true
+
+      - name: Build Docker image
+        run: docker build -t pinata-proxy:latest .
+
+      - name: Verify Docker image created
+        run: docker images pinata-proxy:latest

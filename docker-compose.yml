@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  pinata-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: pinata-proxy:latest
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    restart: unless-stopped

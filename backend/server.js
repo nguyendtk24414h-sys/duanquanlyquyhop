@@ -5,34 +5,38 @@ const fetch = require('node-fetch');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 
 dotenv.config();
 
 const app = express();
 // Security headers
-app.use(helmet());
+// Disable Helmet's default Content Security Policy so the frontend can load
+// external CDN scripts and run inline bootstrap code used by the SPA.
+// We still keep other Helmet protections enabled.
+// Disable Helmet's default Content Security Policy and cross-origin embedder
+// policies so the SPA can load CDN scripts and resources when served from
+// the proxy. We keep other Helmet protections enabled.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  originAgentCluster: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 
-// CORS: allow local development origins, explicit origins, and Firebase hosting domains
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5500,http://127.0.0.1:5500,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080').split(',').map((origin) => origin.trim()).filter(Boolean);
+// Explicitly set a permissive Content-Security-Policy to allow CDN scripts
+// and necessary inline bootstrap code used by the SPA. This overrides any
+// restrictive CSP that may be applied by intermediaries or the browser.
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://www.gstatic.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://api.pinata.cloud https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://www.gstatic.com https://ethereum-sepolia-rpc.publicnode.com https://duanquanlyquyhop-production.up.railway.app; frame-src 'self' https://www.google.com; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none';");
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  next();
+});
 
-function isLocalDevOrigin(origin) {
-  try {
-    const parsed = new URL(origin);
-    return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-  } catch {
-    return false;
-  }
-}
-
-function isFirebaseHostingOrigin(origin) {
-  try {
-    const parsed = new URL(origin);
-    return parsed.hostname.endsWith('.firebaseapp.com') || parsed.hostname.endsWith('.web.app');
-  } catch {
-    return false;
-  }
-}
-
+// CORS: allow browser clients to call proxy endpoints.
+// For production, replace `origin: true` with an explicit allowlist if needed.
 app.use(cors({
   origin: true,
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -43,9 +47,15 @@ app.options('*', cors());
 app.use(express.json({ limit: '25mb' }));
 
 // Serve frontend files when app is hosted as a single service
-app.use(express.static(path.join(__dirname)));
+const frontendCandidates = [
+  path.join(__dirname, 'frontend'),
+  path.join(__dirname, '..', 'frontend')
+];
+const frontendDirectory = frontendCandidates.find((candidate) => fs.existsSync(candidate)) || path.join(__dirname, 'frontend');
+
+app.use(express.static(frontendDirectory));
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+  res.sendFile(path.join(frontendDirectory, 'index.html'));
 });
 
 // Rate limiter (general)
@@ -57,8 +67,22 @@ const PINATA_API_KEY = process.env.PINATA_API_KEY;
 const PINATA_API_SECRET = process.env.PINATA_API_SECRET;
 const PORT = process.env.PORT || 3000;
 
+const FIREBASE_CONFIG = {
+  apiKey: process.env.FIREBASE_API_KEY || '',
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN || '',
+  projectId: process.env.FIREBASE_PROJECT_ID || '',
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: process.env.FIREBASE_APP_ID || '',
+  measurementId: process.env.FIREBASE_MEASUREMENT_ID || ''
+};
+
 if (!PINATA_JWT && (!PINATA_API_KEY || !PINATA_API_SECRET)) {
   console.warn('Pinata credentials are missing. Set PINATA_JWT or PINATA_API_KEY + PINATA_API_SECRET.');
+}
+
+if (!FIREBASE_CONFIG.apiKey) {
+  console.warn('Firebase config is incomplete. Set FIREBASE_API_KEY and related env variables.');
 }
 
 function buildPinataHeaders() {
@@ -75,6 +99,10 @@ function buildPinataHeaders() {
     'Content-Type': 'application/json'
   };
 }
+
+app.get('/config/firebase', (req, res) => {
+  res.json(FIREBASE_CONFIG);
+});
 
 app.post('/api/pinata/pin-json', async (req, res) => {
   try {
