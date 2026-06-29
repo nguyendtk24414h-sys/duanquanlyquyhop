@@ -12,6 +12,16 @@
   let firestoreSharedVote = null;
   let firestoreTxs = { executed: {}, created: {}, approved: {} };
 
+  const defaultFirebaseConfig = {
+    apiKey: 'AIzaSyAwcLsUSrlf15lYUvk6aVkzkGNcUDSVNHs',
+    authDomain: 'hethongquanlyquylop.firebaseapp.com',
+    projectId: 'hethongquanlyquylop',
+    storageBucket: 'hethongquanlyquylop.firebasestorage.app',
+    messagingSenderId: '192824375322',
+    appId: '1:192824375322:web:e02e091e12dd63c57ef9a3',
+    measurementId: 'G-V7XYT92N1N'
+  };
+
   function getPendingMints() {
     return firestoreMints;
   }
@@ -41,8 +51,8 @@
     firestoreMints = mints;
     try { localStorage.setItem(`${appId}_mints`, JSON.stringify(mints)); } catch(e) {}
     try {
-      const user = await ensureFirebaseReady();
-      if (user && db) {
+      await ensureFirebaseReady();
+      if (db) {
         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('mints').doc('main').set({ items: mints });
         updateCloudSyncStatus(true, null);
       }
@@ -68,8 +78,8 @@
       localStorage.setItem(`${appId}_paidMembers`, JSON.stringify(firestorePaidMembers));
     } catch(e) {}
     try {
-      const user = await ensureFirebaseReady();
-      if (user && db) {
+      await ensureFirebaseReady();
+      if (db) {
         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('campaign').doc('main').set({
           campaign: campaign,
           paidMembers: paidMembers,
@@ -97,8 +107,8 @@
       }
     } catch(e) {}
     try {
-      const user = await ensureFirebaseReady();
-      if (user && db) {
+      await ensureFirebaseReady();
+      if (db) {
         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('campaign').doc('main').set({ activeVote: vote }, { merge: true });
         updateCloudSyncStatus(true, null);
         console.log('Đồng bộ biểu quyết Snapshot và mã băm IPFS CID lên Cloud Firestore thành công!');
@@ -117,8 +127,8 @@
     firestoreTxs = txs;
     try { localStorage.setItem(`${appId}_txs`, JSON.stringify(txs)); } catch(e) {}
     try {
-      const user = await ensureFirebaseReady();
-      if (user && db) {
+      await ensureFirebaseReady();
+      if (db) {
         await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('campaign').doc('main').set({ transactions: txs }, { merge: true });
         updateCloudSyncStatus(true, null);
         console.log('Đồng bộ mã hash giao dịch lên Cloud Firestore thành công!');
@@ -149,144 +159,67 @@
     } catch(e) { console.warn('Lỗi nạp LocalStorage Fallbacks:', e); }
   }
 
+  let firebaseAuthPromise = null;
+
   async function getFirebaseConfig() {
     if (window.__FIREBASE_CONFIG__) return window.__FIREBASE_CONFIG__;
 
-    const response = await fetch('/config/firebase');
-    if (!response.ok) {
-      throw new Error('Không thể tải cấu hình Firebase từ server.');
+    const configUrl = `${window.location.origin}/config/firebase`;
+    try {
+      const response = await fetch(configUrl, { cache: 'no-store' });
+      if (response.ok) {
+        const config = await response.json();
+        if (config && config.apiKey) {
+          window.__FIREBASE_CONFIG__ = config;
+          return config;
+        }
+      }
+      console.warn('Fetch cấu hình Firebase trả về lỗi hoặc không hợp lệ:', response.status, response.statusText);
+    } catch (error) {
+      console.warn('Không thể tải cấu hình Firebase từ backend, dùng cấu hình fallback.', error);
     }
 
-    const config = await response.json();
-    if (!config || !config.apiKey) {
-      throw new Error('Firebase config chưa được cấu hình đúng.');
-    }
-
-    window.__FIREBASE_CONFIG__ = config;
-    return config;
+    window.__FIREBASE_CONFIG__ = defaultFirebaseConfig;
+    return defaultFirebaseConfig;
   }
 
-  let firebaseAuthPromise = null;
   function ensureFirebaseReady() {
     if (firebaseAuthPromise) return firebaseAuthPromise;
-    firebaseAuthPromise = new Promise((resolve, reject) => {
-      if (typeof window.firebase === 'undefined') { reject(new Error('Firebase SDK not loaded')); return; }
+    firebaseAuthPromise = (async () => {
+      if (typeof window.firebase === 'undefined') { throw new Error('Firebase SDK not loaded'); }
       const firebase = window.firebase;
+      const firebaseConfig = await getFirebaseConfig();
 
-      getFirebaseConfig().then((firebaseConfig) => {
-        try {
-          if (firebase.apps.length === 0) { firebaseApp = firebase.initializeApp(firebaseConfig); } else { firebaseApp = firebase.app(); }
-          db = firebaseApp.firestore();
-          auth = firebaseApp.auth();
-          // expose db/auth for existing inline code that references them
-          window.db = db;
-          window.auth = auth;
-
-          const initAuth = async () => {
-            try {
-              if (auth.currentUser) {
-                resolve(auth.currentUser);
-                return;
-              }
-
-              if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await auth.signInWithCustomToken(__initial_auth_token);
-              } else {
-                await auth.signInAnonymously();
-              }
-
-              if (auth.currentUser) {
-                resolve(auth.currentUser);
-              } else {
-                const fallbackUser = await new Promise((resolveUser) => {
-                  const unsubscribe = auth.onAuthStateChanged((user) => {
-                    if (user) {
-                      unsubscribe();
-                      resolveUser(user);
-                    }
-                  });
-                  setTimeout(() => {
-                    unsubscribe();
-                    resolveUser(null);
-                  }, 4000);
-                });
-                if (fallbackUser) {
-                  resolve(fallbackUser);
-                } else {
-                  reject(new Error('Firebase auth did not produce a user.'));
-                }
-              }
-            } catch(err) {
-              console.warn('Auth failed, retrying anonymous:', err);
-              try {
-                await auth.signInAnonymously();
-                if (auth.currentUser) {
-                  resolve(auth.currentUser);
-                } else {
-                  reject(err);
-                }
-              } catch(e) {
-                reject(e);
-              }
-            }
-          };
-          initAuth();
-        } catch(e) {
-          reject(e);
+      try {
+        if (firebase.apps.length === 0) {
+          firebaseApp = firebase.initializeApp(firebaseConfig);
+        } else {
+          firebaseApp = firebase.app();
         }
-      }).catch(reject);
+        db = firebaseApp.firestore();
+        auth = firebaseApp.auth();
+        window.db = db;
+        window.auth = auth;
 
-        const initAuth = async () => {
+        if (auth && typeof auth.signInAnonymously === 'function' && !auth.currentUser) {
           try {
-            if (auth.currentUser) {
-              resolve(auth.currentUser);
-              return;
-            }
-
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
               await auth.signInWithCustomToken(__initial_auth_token);
             } else {
               await auth.signInAnonymously();
             }
-
-            if (auth.currentUser) {
-              resolve(auth.currentUser);
-            } else {
-              const fallbackUser = await new Promise((resolveUser) => {
-                const unsubscribe = auth.onAuthStateChanged((user) => {
-                  if (user) {
-                    unsubscribe();
-                    resolveUser(user);
-                  }
-                });
-                setTimeout(() => {
-                  unsubscribe();
-                  resolveUser(null);
-                }, 4000);
-              });
-              if (fallbackUser) {
-                resolve(fallbackUser);
-              } else {
-                reject(new Error('Firebase auth did not produce a user.'));
-              }
-            }
-          } catch(err) {
-            console.warn('Auth failed, retrying anonymous:', err);
-            try {
-              await auth.signInAnonymously();
-              if (auth.currentUser) {
-                resolve(auth.currentUser);
-              } else {
-                reject(err);
-              }
-            } catch(e) {
-              reject(e);
-            }
+          } catch (err) {
+            console.warn('Firebase auth không sẵn sàng, vẫn tiếp tục dùng Firestore:', err);
           }
-        };
-        initAuth();
-      } catch(e) { reject(e); }
-    });
+        }
+
+        return auth?.currentUser || null;
+      } catch (e) {
+        firebaseAuthPromise = null;
+        console.error('Lỗi khởi tạo Firebase:', e);
+        throw e;
+      }
+    })();
     return firebaseAuthPromise;
   }
 

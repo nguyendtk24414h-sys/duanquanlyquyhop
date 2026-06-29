@@ -9,13 +9,7 @@ const path = require('path');
 dotenv.config();
 
 const app = express();
-// Security headers
-// Disable Helmet's default Content Security Policy so the frontend can load
-// external CDN scripts and run inline bootstrap code used by the SPA.
-// We still keep other Helmet protections enabled.
-// Disable Helmet's default Content Security Policy and cross-origin embedder
-// policies so the SPA can load CDN scripts and resources when served from
-// the proxy. We keep other Helmet protections enabled.
+// Security headers: avoid over-restricting local Docker-hosted app running on localhost.
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
@@ -24,18 +18,27 @@ app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
 
-// Explicitly set a permissive Content-Security-Policy to allow CDN scripts
-// and necessary inline bootstrap code used by the SPA. This overrides any
-// restrictive CSP that may be applied by intermediaries or the browser.
-app.use((req, res, next) => {
-  res.setHeader('Content-Security-Policy', "default-src 'self' https: data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://www.gstatic.com https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.tailwindcss.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: https:; connect-src 'self' https://api.pinata.cloud https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://www.googleapis.com https://www.gstatic.com https://ethereum-sepolia-rpc.publicnode.com https://duanquanlyquyhop-production.up.railway.app; frame-src 'self' https://www.google.com; worker-src 'self' blob:; child-src 'self' blob:; object-src 'none';");
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-  next();
-});
+// CORS: allow local development origins, explicit origins, and Firebase hosting domains
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:5500,http://127.0.0.1:5500,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080').split(',').map((origin) => origin.trim()).filter(Boolean);
 
-// CORS: allow browser clients to call proxy endpoints.
-// For production, replace `origin: true` with an explicit allowlist if needed.
+function isLocalDevOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isFirebaseHostingOrigin(origin) {
+  try {
+    const parsed = new URL(origin);
+    return parsed.hostname.endsWith('.firebaseapp.com') || parsed.hostname.endsWith('.web.app');
+  } catch {
+    return false;
+  }
+}
+
 app.use(cors({
   origin: true,
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -59,18 +62,19 @@ app.get('/config/firebase', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.json(FIREBASE_CONFIG);
 });
+
 // Serve the local frontend app from the frontend directory so Docker/localhost
 // uses the same app shell and JS modules as the Firebase-hosted build.
-app.use(express.static(path.join(__dirname, '..', 'frontend')));
-app.use('/js', express.static(path.join(__dirname, '..', 'frontend', 'js')));
+app.use(express.static(path.join(__dirname, 'frontend')));
+app.use('/js', express.static(path.join(__dirname, 'frontend', 'js')));
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 app.get('/frontend', (req, res) => {
   res.redirect('/');
 });
 app.get('/frontend/index.html', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', 'frontend', 'index.html'));
+  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 
 // Rate limiter (general)
@@ -104,10 +108,6 @@ const FIREBASE_CONFIG = {
 
 if (!PINATA_JWT && (!PINATA_API_KEY || !PINATA_API_SECRET)) {
   console.warn('Pinata credentials are missing. Set PINATA_JWT or PINATA_API_KEY + PINATA_API_SECRET.');
-}
-
-if (!FIREBASE_CONFIG.apiKey) {
-  console.warn('Firebase config is incomplete. Set FIREBASE_API_KEY and related env variables.');
 }
 
 function buildPinataHeaders() {
@@ -201,6 +201,14 @@ app.post('/api/gemini/ocr', async (req, res) => {
     console.error('Gemini proxy error:', err);
     return res.status(500).json({ error: 'Gemini proxy failed' });
   }
+});
+
+// Fallback to SPA entry point for any unmatched route after all API routes are defined.
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/config/')) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+  res.sendFile(path.join(__dirname, 'frontend', 'index.html'));
 });
 
 const listenPort = Number(process.env.PORT || PORT || 3000);
