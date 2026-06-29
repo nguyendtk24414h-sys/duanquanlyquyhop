@@ -5,7 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "npx nodemon --watch server.js --exec node server.js"
+    "dev": "npx nodemon --watch server.js --exec node server.js",
+    "docker:build": "docker build -t pinata-proxy:latest .",
+    "docker:run": "docker run -d -p 3000:3000 --env-file .env --name pinata-proxy pinata-proxy:latest",
+    "docker:compose:up": "docker compose up --build -d",
+    "docker:compose:down": "docker compose down"
   },
   "engines": {
     "node": ">=18"

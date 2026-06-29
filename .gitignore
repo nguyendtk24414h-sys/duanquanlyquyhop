@@ -2,3 +2,12 @@
 node_modules/
 npm-debug.log
 .DS_Store
+
+# Local Firebase and runtime artifacts
+.firebase/
+firebase-debug.txt
+.firebaserc
+firebase.json
+
+# Local workspace copies not part of repository
+js/

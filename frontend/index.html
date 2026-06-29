@@ -2502,9 +2502,12 @@
 
                 await saveTxsToFirestore(updatedCreated, firestoreTxs.approved, firestoreTxs.executed);
                 
-                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('campaign').doc('main').set({
-                    activeVote: null
-                }, { merge: true });
+                const firestoreDb = window.db;
+                if (firestoreDb && typeof firestoreDb.collection === 'function') {
+                    await firestoreDb.collection('artifacts').doc(appId).collection('public').doc('data').collection('campaign').doc('main').set({
+                        activeVote: null
+                    }, { merge: true });
+                }
                 
                 showCustomAlert('success', 'Tạo đề xuất chi thành công!', 'Đề xuất chi tiêu đã được khởi tạo và lưu vết trên chuỗi!');
                 
@@ -3740,12 +3743,13 @@
         }
 
         async function setupChatListener() {
-            if (!db || typeof db.collection !== 'function') {
+            const firestoreDb = window.db;
+            if (!firestoreDb || typeof firestoreDb.collection !== 'function') {
                 loadLocalChatMessages();
                 return;
             }
             try {
-                const chatCollection = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('chatMessages');
+                const chatCollection = firestoreDb.collection('artifacts').doc(appId).collection('public').doc('data').collection('chatMessages');
                 if (chatListenerUnsubscribe && typeof chatListenerUnsubscribe === 'function') {
                     chatListenerUnsubscribe();
                 }
@@ -3944,8 +3948,9 @@
                 createdAt: window.ethers && window.ethers.BigNumber ? window.ethers.BigNumber.from(String(Date.now())) : Date.now()
             };
             try {
-                if (db && typeof db.collection === 'function') {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('chatMessages').add({
+                const firestoreDb = window.db;
+                if (firestoreDb && typeof firestoreDb.collection === 'function') {
+                    await firestoreDb.collection('artifacts').doc(appId).collection('public').doc('data').collection('chatMessages').add({
                         authorAddress: message.authorAddress,
                         authorName: message.authorName,
                         authorLabel: message.authorLabel,

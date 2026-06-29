@@ -1,0 +1,17 @@
+{
+  "name": "pinata-proxy-server",
+  "version": "1.0.0",
+  "description": "Simple backend proxy for Pinata IPFS metadata uploads.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express-rate-limit": "^6.7.0",
+    "helmet": "^6.0.1",
+    "node-fetch": "^2.6.7",
+    "express": "^4.18.2"
+  }
+}
