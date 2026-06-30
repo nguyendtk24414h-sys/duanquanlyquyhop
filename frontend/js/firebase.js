@@ -12,15 +12,9 @@
   let firestoreSharedVote = null;
   let firestoreTxs = { executed: {}, created: {}, approved: {} };
 
-  const defaultFirebaseConfig = {
-    apiKey: 'AIzaSyAwcLsUSrlf15lYUvk6aVkzkGNcUDSVNHs',
-    authDomain: 'hethongquanlyquylop.firebaseapp.com',
-    projectId: 'hethongquanlyquylop',
-    storageBucket: 'hethongquanlyquylop.firebasestorage.app',
-    messagingSenderId: '192824375322',
-    appId: '1:192824375322:web:e02e091e12dd63c57ef9a3',
-    measurementId: 'G-V7XYT92N1N'
-  };
+  // Firebase config is loaded from backend endpoint /config/firebase
+  // This prevents hardcoding credentials in frontend source
+  const defaultFirebaseConfig = {};
 
   function getPendingMints() {
     return firestoreMints;
@@ -179,6 +173,8 @@
       console.warn('Không thể tải cấu hình Firebase từ backend, dùng cấu hình fallback.', error);
     }
 
+    // If backend config cannot be loaded, use empty config
+    // Backend must be running and /config/firebase must return valid config
     window.__FIREBASE_CONFIG__ = defaultFirebaseConfig;
     return defaultFirebaseConfig;
   }

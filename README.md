@@ -42,6 +42,32 @@ cd c:\Users\AD\public
 npm install
 ```
 
+### Cấu hình Firebase credentials
+
+1. **Sao chép `.env.example` thành `.env`:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Thêm Firebase credentials vào `.env`** (nếu muốn dùng credentials khác):
+   ```
+   FIREBASE_API_KEY=your-api-key
+   FIREBASE_AUTH_DOMAIN=your-auth-domain
+   FIREBASE_PROJECT_ID=your-project-id
+   ... (các trường khác)
+   ```
+
+3. **Thêm Pinata credentials** (nếu cần upload lên IPFS):
+   ```
+   PINATA_JWT=your-pinata-jwt
+   # hoặc:
+   PINATA_API_KEY=your-api-key
+   PINATA_API_SECRET=your-api-secret
+   ```
+
+> **Lưu ý:** `.env` không được commit vào Git (đã được thêm vào `.gitignore`).
+> Frontend không có credentials hardcode, nó load từ endpoint `/config/firebase` của backend.
+
 ### Chạy trực tiếp bằng Node.js
 
 ```bash
@@ -53,13 +79,24 @@ Server mặc định lắng nghe tại `http://localhost:3000`.
 
 ### Xây dựng và chạy bằng Docker
 
+#### Cách 1: Chạy trực tiếp
+
 ```bash
 cd c:\Users\AD\public
 docker build -t duanquanlyquyhop .
-docker run --rm -p 3000:3000 duanquanlyquyhop
+docker run --rm -p 3000:3000 --env-file .env duanquanlyquyhop
+```
+
+#### Cách 2: Dùng Docker Compose (Khuyến nghị)
+
+```bash
+cd c:\Users\AD\public
+docker compose up --build -d
 ```
 
 Khi container chạy, truy cập `http://localhost:3000` để mở SPA.
+
+> **Lưu ý:** Docker container cần file `.env` để load Firebase credentials.
 
 ## Cấu hình môi trường (Environment Variables)
 
@@ -79,6 +116,21 @@ Server hỗ trợ các biến môi trường sau:
 - `ALLOWED_ORIGINS` - danh sách origin được phép (chuẩn bị cho CORS)
 
 > Nếu không đặt biến Firebase, server vẫn trả về cấu hình mặc định đã tích hợp sẵn cho demo.
+
+## Security
+
+### Credentials Management
+
+- **Frontend không chứa credentials**: Firebase API keys được load từ endpoint `/config/firebase` của backend, không được hardcode trong source code frontend.
+- **`.env` file bị ignore**: File `.env` chứa tất cả credentials nhạy cảm và không được commit vào Git.
+- **Backend-controlled config**: Tất cả credentials được quản lý ở backend thông qua environment variables, an toàn hơn khi deploy.
+
+### Cách thức hoạt động
+
+1. **Frontend khởi động** → Gọi `/config/firebase` từ backend
+2. **Backend trả config** → Từ environment variables hoặc fallback default
+3. **Frontend khởi tạo Firebase** → Dùng config từ backend
+4. **Người khác clone repo** → Không có credentials, phải thêm `.env` riêng
 
 ## Đường dẫn API chính
 
